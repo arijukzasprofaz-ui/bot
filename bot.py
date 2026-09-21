@@ -1,17 +1,14 @@
-# ============================================================
-# flow_patch.py - paste into your existing bot script
-#
-# 1. Keep everything above "# Discord bot" exactly as it is.
-# 2. Delete your old `send_result`, `cmd_deob` and `cmd_deob_full`.
-# 3. Paste this whole file in their place (before `@bot.command(name="detect")`,
-#    and after `bot = commands.Bot(...)` since the decorators need `bot`).
-# 4. In `cmd_help`, replace the !deob / !deob_full lines with the one at the bottom.
-#
-# Bot permissions needed: Manage Channels (for the lock), Send Messages, Attach Files.
-# Approval requests are DM'd to the application owner (team owner for team apps).
-# The owner must allow DMs from server members, or the bot can't reach them.
-# ============================================================
+import discord
+from discord.ext import commands
+import asyncio
+import ast
+import io
+import math
+import os
+import re
 import random
+from dataclasses import dataclass
+from typing import Optional
 
 TRACE_DELAY = (4.0, 6.0)          # cosmetic minimum display time, seconds
 APPROVAL_TIMEOUT = 24 * 60 * 60   # how long the reviewer has to respond

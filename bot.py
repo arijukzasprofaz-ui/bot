@@ -1,8 +1,8 @@
 import discord
 from discord.ext import commands
-import re, math, io
+import re, math, io, os
 
-TOKEN = "YOUR_BOT_TOKEN_HERE"
+TOKEN = os.environ.get("TOKEN")
 
 # ─── DECODER ───────────────────────────────────────────────────
 

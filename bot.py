@@ -1462,144 +1462,180 @@ def deobfuscate_luaobfuscator(code, include_instrs=False):
 
 
 # ============================================================
-# ── WeAreDevs Method 2 (unchanged) ───────────────────────────
+# ── WeAreDevs static recursive backend ───────────────────────
 # ============================================================
+
+# This backend deliberately never executes submitted Lua/Luau.
+# It recursively peels recoverable string/table layers and extracts
+# statically recoverable embedded source.
 
 def _safe_lua_expr(expr):
     return _safe_expr(expr)
 
 def _decode_lua_escapes(value):
     def repl(m):
-        token = m.group(1)
-        try:
-            return chr(int(token[1:], 16) if token.lower().startswith("x") else int(token))
-        except Exception:
-            return m.group(0)
-    value = re.sub(r"\\(x[0-9a-fA-F]{2}|[0-9]{1,3})", repl, value)
-    return (value.replace(r'\"', '"').replace(r"\'", "'").replace(r"\\", "\\")
-            .replace(r"\n", "\n").replace(r"\r", "\r").replace(r"\t", "\t"))
+        token=m.group(1)
+        try: return chr(int(token[1:],16) if token.lower().startswith("x") else int(token))
+        except Exception: return m.group(0)
+    value=re.sub(r"\\(x[0-9a-fA-F]{2}|[0-9]{1,3})",repl,value)
+    return value.replace(r'\"','"').replace(r"\'","'").replace(r"\\","\\").replace(r"\n","\n").replace(r"\r","\r").replace(r"\t","\t")
 
-def _extract_lua_table_body(code, name, limit=200000):
-    m = re.search(r"\blocal\s+" + re.escape(name) + r"\s*=\s*\{", code[:limit])
-    if not m:
-        return None
-    start = m.end(); depth = 1; quote = None; esc = False
-    for i in range(start, min(len(code), limit)):
-        ch = code[i]
+def _extract_lua_table_body(code,name,limit=400000):
+    m=re.search(r"\b(?:local\s+)?"+re.escape(name)+r"\s*=\s*\{",code[:limit])
+    if not m: return None
+    start=m.end(); depth=1; quote=None; esc=False
+    for i in range(start,min(len(code),limit)):
+        ch=code[i]
         if quote:
-            if esc:     esc = False
-            elif ch == "\\": esc = True
-            elif ch == quote: quote = None
+            if esc: esc=False
+            elif ch=="\\": esc=True
+            elif ch==quote: quote=None
             continue
-        if ch in "\"'": quote = ch
-        elif ch == "{": depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return code[start:i]
+        if ch in "\"'": quote=ch
+        elif ch=="{": depth+=1
+        elif ch=="}":
+            depth-=1
+            if depth==0: return code[start:i]
     return None
 
 def _parse_numeric_lookup_table(body):
-    out = {}
-    if not body:
-        return out
-    pattern = re.compile(
-        r'''(?:\[\s*(["'])(.*?)\1\s*\]|([A-Za-z_][A-Za-z0-9_]*))'''
-        r'''\s*=\s*([0-9+\-*/%().\s]+)(?=[,;]|$)''')
+    out={}
+    if not body: return out
+    pattern=re.compile(r'''(?:\[\s*(["'])(.*?)\1\s*\]|([A-Za-z_][A-Za-z0-9_]*))\s*=\s*([0-9+\-*/%().\s]+)(?=[,;]|$)''')
     for m in pattern.finditer(body):
-        key = m.group(2) if m.group(2) is not None else m.group(3)
-        val = _safe_lua_expr(m.group(4))
-        if val is not None and len(key) == 1:
-            out[key] = int(val)
+        key=m.group(2) if m.group(2) is not None else m.group(3)
+        val=_safe_lua_expr(m.group(4))
+        if val is not None and len(key)==1: out[key]=int(val)
     return out
 
 def _extract_quoted_strings(body):
-    return [_decode_lua_escapes(m.group(1))
-            for m in re.finditer(r'"((?:\\.|[^"\\])*)"', body or "")]
+    return [_decode_lua_escapes(m.group(1)) for m in re.finditer(r'"((?:\\.|[^"\\])*)"',body or "")]
 
-def _custom_b64_decode(value, alphabet):
-    if not value or value[0] not in ("?", "s"):
-        return None
-    width, out_width = (5, 4) if value[0] == "?" else (4, 3)
-    vals = []
+def _custom_b64_decode(value,alphabet):
+    if not value or value[0] not in ("?","s") or not alphabet: return None
+    width,out_width=(5,4) if value[0]=="?" else (4,3)
+    vals=[]
     for ch in value[1:]:
-        if ch == "=":     vals.append(0)
+        if ch=="=": vals.append(0)
         elif ch in alphabet: vals.append(alphabet[ch])
-        else:             return None
-    out = bytearray()
-    for i in range(0, len(vals), width):
-        chunk_v = vals[i:i + width]
-        if len(chunk_v) < 2: break
-        real = len(chunk_v)
-        chunk_v += [0] * (width - real)
-        n = 0
-        for v in chunk_v: n = n * 64 + v
-        for shift in range((out_width - 1) * 8, -1, -8):
-            out.append((n >> shift) & 255)
-        if real < width:
-            del out[-min(width - real, out_width):]
-    try:               return out.decode("utf-8")
-    except UnicodeDecodeError: return out.decode("latin-1", errors="replace")
+        else: return None
+    out=bytearray()
+    for i in range(0,len(vals),width):
+        chunk_v=vals[i:i+width]
+        if len(chunk_v)<2: break
+        real=len(chunk_v); chunk_v += [0]*(width-real); n=0
+        for v in chunk_v: n=n*64+v
+        for shift in range((out_width-1)*8,-1,-8): out.append((n>>shift)&255)
+        if real<width: del out[-min(width-real,out_width):]
+    try: return out.decode("utf-8")
+    except UnicodeDecodeError: return out.decode("latin-1",errors="replace")
 
 def _decode_wad_strings(code):
-    ubody  = _extract_lua_table_body(code, "U")
-    omap   = _parse_numeric_lookup_table(_extract_lua_table_body(code, "o") or "")
-    wmap   = _parse_numeric_lookup_table(_extract_lua_table_body(code, "w") or "")
-    strings = _extract_quoted_strings(ubody or "")
-    decoded = []
+    ubody=_extract_lua_table_body(code,"U")
+    omap=_parse_numeric_lookup_table(_extract_lua_table_body(code,"o") or "")
+    wmap=_parse_numeric_lookup_table(_extract_lua_table_body(code,"w") or "")
+    strings=_extract_quoted_strings(ubody or "")
+    decoded=[]
     for s in strings:
-        if   s.startswith("?"): value = _custom_b64_decode(s, omap)
-        elif s.startswith("s"): value = _custom_b64_decode(s, wmap)
-        else:                   value = None
+        value=_custom_b64_decode(s,omap) if s.startswith("?") else (_custom_b64_decode(s,wmap) if s.startswith("s") else None)
         decoded.append(value if value is not None else s)
-    return decoded, omap, wmap
+    return decoded,omap,wmap
 
-def _replace_wad_string_indexes(code, decoded):
+def _replace_wad_string_indexes(code,decoded):
     def repl(m):
-        idx = int(m.group(1)) - 1
-        return _lua_literal(decoded[idx]) if 0 <= idx < len(decoded) else m.group(0)
-    return re.sub(r"\bU\s*\[\s*(\d+)\s*\]", repl, code)
+        idx=int(m.group(1))-1
+        return _lua_literal(decoded[idx]) if 0<=idx<len(decoded) else m.group(0)
+    return re.sub(r"\bU\s*\[\s*(\d+)\s*\]",repl,code)
+
+def _strip_named_lua_table(code,name):
+    m=re.search(r"\b(?:local\s+)?"+re.escape(name)+r"\s*=\s*\{",code,re.M)
+    if not m: return code
+    start=m.start(); depth=0; quote=None; esc=False
+    for i in range(m.end()-1,len(code)):
+        ch=code[i]
+        if quote:
+            if esc: esc=False
+            elif ch=="\\": esc=True
+            elif ch==quote: quote=None
+            continue
+        if ch in "\"'": quote=ch
+        elif ch=="{": depth+=1
+        elif ch=="}":
+            depth-=1
+            if depth==0:
+                end=i+1
+                while end<len(code) and code[end] in " \t\r\n;": end+=1
+                return code[:start]+code[end:]
+    return code
+
+def _extract_balanced_call_args(code,func_name,limit=20):
+    results=[]
+    pat=re.compile(r"\b"+re.escape(func_name)+r"\s*\(")
+    for m in pat.finditer(code):
+        i=m.end(); out=[]; esc=False
+        while i<len(code):
+            ch=code[i]
+            if esc: out.append(ch); esc=False
+            elif ch=='\\': out.append(ch); esc=True
+            elif ch=='"':
+                results.append(_decode_lua_escapes(''.join(out))); break
+            else: out.append(ch)
+            i+=1
+        if len(results)>=limit: break
+    return results
+
+def _fold_simple_lua_constants(code,rounds=4):
+    for _ in range(rounds):
+        old=code
+        def repl(m):
+            v=_safe_lua_expr(m.group(0))
+            return str(v) if isinstance(v,(int,float)) else m.group(0)
+        code=re.sub(r"(?<![A-Za-z_])\d+(?:\s*[+\-*/%]\s*\d+)+(?![A-Za-z_])",repl,code)
+        if code==old: break
+    return code
+
+def _recover_wad_layers(code,max_rounds=8):
+    current=code; recovered=[]; stats=[]; seen={current}
+    for rnd in range(max_rounds):
+        decoded,omap,wmap=_decode_wad_strings(current)
+        changed=False
+        if decoded:
+            replaced=_replace_wad_string_indexes(current,decoded)
+            if replaced!=current:
+                current=replaced; changed=True
+                stats.append((rnd+1,len(decoded),len(omap),len(wmap)))
+                for x in decoded:
+                    if isinstance(x,str) and len(x)>=2 and x not in recovered: recovered.append(x)
+        current=_fold_simple_lua_constants(current)
+        for payload in _extract_balanced_call_args(current,"loadstring"):
+            if payload and payload not in recovered:
+                recovered.append(payload)
+                if re.search(r"\blocal\s+U\s*=\s*\{",payload) and payload not in seen:
+                    seen.add(payload); nested,_,_=_decode_wad_strings(payload)
+                    if nested:
+                        nested_code=_replace_wad_string_indexes(payload,nested)
+                        if nested_code!=payload:
+                            current += "\n\n-- [WAD nested static payload]\n"+nested_code; changed=True
+        if current in seen and not changed: break
+        if current in seen: break
+        seen.add(current)
+    return current,recovered,stats
 
 def deobfuscate_wearedevs(code):
-    decoded, omap, wmap = _decode_wad_strings(code)
-    lifted = _replace_wad_string_indexes(code, decoded)
-    for name in ("U", "o", "w"):
-        pattern = re.compile(r"\blocal\s+" + re.escape(name) + r"\s*=\s*\{", re.M)
-        m = pattern.search(lifted)
-        if m:
-            start = m.start(); depth = 0; quote = None; esc = False
-            for i in range(m.end() - 1, len(lifted)):
-                ch = lifted[i]
-                if quote:
-                    if esc:     esc = False
-                    elif ch == "\\": esc = True
-                    elif ch == quote: quote = None
-                    continue
-                if ch in "\"'": quote = ch
-                elif ch == "{": depth += 1
-                elif ch == "}":
-                    depth -= 1
-                    if depth == 0:
-                        end = i + 1
-                        while end < len(lifted) and lifted[end] in " \t\r\n;":
-                            end += 1
-                        lifted = lifted[:start] + lifted[end:]
-                        break
-    lifted = re.sub(r"if\s+false\s+then[\s\S]*?end", "", lifted, flags=re.I)
-    lifted = re.sub(r"\n{3,}", "\n\n", lifted).strip()
-    header = [
-        "=" * 62, "  WeAreDevs v1.0.0 — reconstructed Lua",
-        f"  {len(code):,} chars | {len(decoded):,} decoded strings",
-        "=" * 62, "",
-        "-- String layer decoded statically.",
-        "-- VM code is not executed.",
-        "-- Unknown VM semantics are not guessed.", "",
-    ]
-    if lifted:
-        header += ["-- RECONSTRUCTED SOURCE", "", lifted]
-    else:
-        header += ["-- No non-table source could be reconstructed."]
-    header += ["", f"-- decoder mappings: o={len(omap)}, w={len(wmap)}"]
+    lifted,recovered,stats=_recover_wad_layers(code)
+    for name in ("U","o","w"): lifted=_strip_named_lua_table(lifted,name)
+    lifted=re.sub(r"if\s+false\s+then[\s\S]*?end","",lifted,flags=re.I)
+    lifted=re.sub(r"\n{3,}","\n\n",lifted).strip()
+    unique=[]
+    for x in recovered:
+        if x not in unique: unique.append(x)
+    header=["="*62,"  WeAreDevs v1.0.0 — recursive static reconstruction",f"  {len(code):,} chars | {len(unique):,} recovered strings/payloads","="*62,"","-- String/table layers decoded statically.","-- Literal embedded loadstring payloads are extracted but NOT executed.","-- VM/runtime semantics are not guessed.",""]
+    if stats: header += ["-- decode rounds: "+", ".join(f"#{r} ({n} strings, o={o}, w={w})" for r,n,o,w in stats),""]
+    header += ["-- RECONSTRUCTED SOURCE","",lifted or "-- No non-table source could be reconstructed."]
+    if unique:
+        header += ["","-- RECOVERED LITERAL PAYLOADS / STRINGS"]
+        for i,x in enumerate(unique[:200],1): header += [f"\n-- PAYLOAD {i}\n{x[:12000]}" + ("\n-- [payload truncated]" if len(x)>12000 else "")]
+    header += ["","-- Safety: submitted Lua/Luau was never executed."]
     return "\n".join(header)
 
 

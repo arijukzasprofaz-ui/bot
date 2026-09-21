@@ -1,4 +1,3 @@
-```python
 import discord
 from discord.ext import commands
 import asyncio
@@ -1828,4 +1827,3 @@ if not TOKEN:
     )
 
 bot.run(TOKEN)
-```

@@ -9,6 +9,9 @@ import os
 import random
 import re
 import struct
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from typing import Optional
 

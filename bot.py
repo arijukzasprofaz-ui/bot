@@ -600,16 +600,27 @@ async def send_result(ctx, msg, result: str, filename: str):
         await ctx.reply("✅ Done — full output attached:", file=f)
  
 # ─── BOT SETUP ────────────────────────────────────────────────
- 
+
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
- 
+
+# Disable discord.py's built-in !help command because this bot
+# provides its own custom help command below.
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents,
+    help_command=None
+)
+
 @bot.event
 async def on_ready():
     print(f"[+] Logged in as {bot.user} ({bot.user.id})")
-    await bot.change_presence(activity=discord.Activity(
-        type=discord.ActivityType.watching, name="obfuscated lua"))
+    await bot.change_presence(
+        activity=discord.Activity(
+            type=discord.ActivityType.watching,
+            name="obfuscated lua"
+        )
+    )
  
 # ─── COMMANDS ─────────────────────────────────────────────────
  

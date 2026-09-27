@@ -1,12 +1,10 @@
-FROM python:3.11-slim
+FROM python:3.11-alpine
 
-RUN apt-get update && apt-get install -y curl && \
-    curl -L https://github.com/luau-lang/luau/releases/download/0.636/luau-linux-x86_64 -o /usr/local/bin/luau && \
-    chmod +x /usr/local/bin/luau
+RUN apk add --no-cache luau gcc musl-dev python3-dev libffi-dev
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt --no-cache-dir
 COPY bot.py .
 
 CMD ["python", "bot.py"]

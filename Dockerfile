@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y curl && \
-    curl -L https://github.com/luau-lang/luau/releases/download/0.636/luau-linux -o /usr/local/bin/luau && \
+    curl -L https://github.com/luau-lang/luau/releases/download/0.636/luau-linux-x86_64 -o /usr/local/bin/luau && \
     chmod +x /usr/local/bin/luau
 
 WORKDIR /app

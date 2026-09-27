@@ -20,10 +20,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 # ── Config ───────────────────────────────────────────────────────────────────
-BOT_TOKEN   = "YOUR_BOT_TOKEN_HERE"
-LUAU_BIN    = "luau"            # luau binary; full path if not in PATH
-MAX_FILE_MB = 5
-ANTHROPIC_KEY = ""              # optional: enables Stage 3 semantic cleanup
+BOT_TOKEN     = os.environ.get("TOKEN", "")
+LUAU_BIN      = os.environ.get("LUAU_BIN", "luau")   # override if luau isn't in PATH
+MAX_FILE_MB   = 5
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_KEY", "")  # optional: enables Stage 3 semantic cleanup
 
 # ── Opcode tables (Section 11) ────────────────────────────────────────────────
 # Key = opcode number, Value = which data column holds the branch target
@@ -904,7 +904,7 @@ class LuraphDeobfuscator:
             return {
                 "success": False,
                 "error": f"luau binary '{LUAU_BIN}' not found. "
-                         f"Install from https://github.com/luau-lang/luau/releases and set LUAU_BIN in bot.py.",
+                         f"Install from https://github.com/luau-lang/luau/releases and set LUAU_BIN env var.",
                 "seam_found": seam_found,
             }
         except subprocess.TimeoutExpired:
@@ -1199,7 +1199,7 @@ async def cmd_help(interaction: discord.Interaction):
 
             "**Requirements:**\n"
             "`luau` binary in PATH. Download: https://github.com/luau-lang/luau/releases\n"
-            "Set `ANTHROPIC_KEY` in bot.py for Stage 3."
+            "Set `ANTHROPIC_KEY` env var for Stage 3."
         ),
         color = discord.Color.blurple(),
     )
@@ -1210,7 +1210,7 @@ async def cmd_help(interaction: discord.Interaction):
 # ── Entry ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        print("[!] Set BOT_TOKEN in bot.py before running.")
+    if not BOT_TOKEN:
+        print("[!] TOKEN environment variable is not set.")
         sys.exit(1)
     bot.run(BOT_TOKEN)
